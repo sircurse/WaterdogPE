@@ -11,7 +11,7 @@ import java.util.Queue;
 
 public class ResourcePacksHandler extends AbstractUpstreamHandler {
 
-    private static final int CHUNK_SEND_DELAY_TICKS = 2;
+    private static final int CHUNK_SEND_DELAY_TICKS = 0;
 
     private final Queue<ResourcePackDataInfoPacket> pendingPacks = new LinkedList<>();
     private final Queue<ResourcePackChunkRequestPacket> chunkRequestQueue = new LinkedList<>();
