@@ -1,36 +1,22 @@
-/*
- * Copyright 2022 WaterdogTEAM
- * Licensed under the GNU General Public License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package dev.waterdog.waterdogpe.network.protocol.handler.upstream;
 
-import org.cloudburstmc.protocol.bedrock.packet.*;
 import dev.waterdog.waterdogpe.event.defaults.PlayerResourcePackApplyEvent;
 import dev.waterdog.waterdogpe.packs.PackManager;
 import dev.waterdog.waterdogpe.player.ProxiedPlayer;
+import org.cloudburstmc.protocol.bedrock.packet.*;
 import org.cloudburstmc.protocol.common.PacketSignal;
 
 import java.util.LinkedList;
 import java.util.Queue;
 
-/**
- * Upstream handler handling proxy manager resource packs.
- */
 public class ResourcePacksHandler extends AbstractUpstreamHandler {
 
+    private static final int CHUNK_SEND_DELAY_TICKS = 4;
+
     private final Queue<ResourcePackDataInfoPacket> pendingPacks = new LinkedList<>();
+    private final Queue<ResourcePackChunkRequestPacket> chunkRequestQueue = new LinkedList<>();
     private ResourcePackDataInfoPacket sendingPack;
+    private boolean sendingChunks = false;
 
     public ResourcePacksHandler(ProxiedPlayer player) {
         super(player);
@@ -44,6 +30,7 @@ public class ResourcePacksHandler extends AbstractUpstreamHandler {
             case REFUSED:
                 this.player.disconnect("disconnectionScreen.noReason");
                 break;
+
             case SEND_PACKS:
                 for (String packIdVer : packet.getPackIds()) {
                     ResourcePackDataInfoPacket response = packManager.packInfoFromIdVer(packIdVer);
@@ -55,14 +42,16 @@ public class ResourcePacksHandler extends AbstractUpstreamHandler {
                 }
                 this.sendNextPacket();
                 break;
+
             case HAVE_ALL_PACKS:
                 PlayerResourcePackApplyEvent event = new PlayerResourcePackApplyEvent(this.player, packManager.getStackPacket());
                 this.player.getProxy().getEventManager().callEvent(event);
                 this.player.getConnection().sendPacket(event.getStackPacket());
                 break;
+
             case COMPLETED:
                 if (!this.player.hasUpstreamBridge()) {
-                    this.player.initialConnect(); // First connection
+                    this.player.initialConnect();
                 }
                 break;
         }
@@ -72,15 +61,10 @@ public class ResourcePacksHandler extends AbstractUpstreamHandler {
 
     @Override
     public PacketSignal handle(ResourcePackChunkRequestPacket packet) {
-        PackManager packManager = this.player.getProxy().getPackManager();
-        ResourcePackChunkDataPacket response = packManager.packChunkDataPacket(packet.getPackId() + "_" + packet.getPackVersion(), packet);
-        if (response == null) {
-            this.player.disconnect("Unknown resource pack!");
-        } else {
-            this.player.sendPacket(response);
-            if (this.sendingPack != null && (packet.getChunkIndex() + 1) >= this.sendingPack.getChunkCount()) {
-                this.sendNextPacket();
-            }
+        this.chunkRequestQueue.add(packet);
+        if (!sendingChunks) {
+            sendingChunks = true;
+            sendNextChunk();
         }
         return this.cancel();
     }
@@ -91,5 +75,38 @@ public class ResourcePacksHandler extends AbstractUpstreamHandler {
             this.sendingPack = infoPacket;
             this.player.sendPacket(infoPacket);
         }
+    }
+
+    private void sendNextChunk() {
+        ResourcePackChunkRequestPacket request = this.chunkRequestQueue.poll();
+        if (request == null) {
+            this.sendingChunks = false;
+            return;
+        }
+
+        PackManager packManager = this.player.getProxy().getPackManager();
+        String key = request.getPackId() + "_" + request.getPackVersion();
+        ResourcePackChunkDataPacket response = packManager.packChunkDataPacket(key, request);
+
+        if (response == null) {
+            this.player.disconnect("Unknown resource pack!");
+            this.sendingChunks = false;
+            return;
+        }
+
+        this.player.sendPacket(response);
+
+        if (this.sendingPack != null && (request.getChunkIndex() + 1) >= this.sendingPack.getChunkCount()) {
+            this.sendNextPacket();
+        }
+
+        // Schedule next chunk send
+        this.player.getProxy().getScheduler().scheduleDelayed(() -> {
+            if (this.player.isConnected()) {
+                sendNextChunk();
+            } else {
+                this.sendingChunks = false;
+            }
+        }, CHUNK_SEND_DELAY_TICKS);
     }
 }
