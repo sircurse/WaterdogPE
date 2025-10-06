@@ -78,6 +78,12 @@ public class WaterdogPE {
             logger.warning("§eUsing higher memory leak detection levels in production environment can affect application stability and performance!");
         }
 
+        //MainLogger logger = MainLogger.getLogger();
+        // ... your existing startup logs
+
+        // dump Cloudburst → EntityFlag ID mapping(s) at startup
+        dev.waterdog.waterdogpe.debug.FlagDump.dumpAll(logger);
+
         try {
             new ProxyServer(logger, DATA_PATH, PLUGIN_PATH);
         } catch (Exception e) {
