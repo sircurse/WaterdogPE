@@ -113,52 +113,53 @@ public class EntityMap implements BedrockPacketHandler {
     //    PacketSignal metaSignal = this.rewriteMetadata(packet.getMetadata());
     //    return mergeSignals(signal, metaSignal);
     //}
+    private static final boolean DEBUG_SPLIT_LANES = true; // flip to true to enforce split
+
 @Override
 public PacketSignal handle(SetEntityDataPacket packet) {
-    // --- probe (keep if useful) ---
-    // dev.waterdog.waterdogpe.debug.EDataProbe.dump("IN", packet, this.player.getLogger());
+    MainLogger log = this.player.getLogger();
+    dev.waterdog.waterdogpe.debug.EDataProbe.dump("IN", packet, log);
 
-    // Always rewrite the eid first
     PacketSignal idSig = rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
 
-    EntityDataMap meta = packet.getMetadata();
-    boolean hasFlags  = meta.containsKey(EntityDataTypes.FLAGS);
-    boolean hasFlags2 = meta.containsKey(EntityDataTypes.FLAGS_2);
+    if (DEBUG_SPLIT_LANES) {
+        var meta = packet.getMetadata();
+        boolean hasF  = meta.containsKey(EntityDataTypes.FLAGS);
+        boolean hasF2 = meta.containsKey(EntityDataTypes.FLAGS_2);
+        if (hasF && hasF2) {
+            var a = new SetEntityDataPacket();
+            a.setRuntimeEntityId(packet.getRuntimeEntityId());
+            var m1 = new EntityDataMap();
+            m1.put(EntityDataTypes.FLAGS, meta.get(EntityDataTypes.FLAGS));
+            if (meta.containsKey(EntityDataTypes.HEIGHT)) m1.put(EntityDataTypes.HEIGHT, meta.get(EntityDataTypes.HEIGHT));
+            a.setMetadata(m1);
+            a.setProperties(packet.getProperties());
+            a.setTick(packet.getTick());
 
-    if (hasFlags && hasFlags2) {
-        // Split into TWO packets to mimic BDS exactly: (FLAGS [+ HEIGHT]) then (FLAGS_2)
-        SetEntityDataPacket a = new SetEntityDataPacket();
-        a.setRuntimeEntityId(packet.getRuntimeEntityId());
-        a.setMetadata(onlyFlags(meta));
-        a.setProperties(packet.getProperties());
-        a.setTick(packet.getTick());
+            var b = new SetEntityDataPacket();
+            b.setRuntimeEntityId(packet.getRuntimeEntityId());
+            var m2 = new EntityDataMap();
+            m2.put(EntityDataTypes.FLAGS_2, meta.get(EntityDataTypes.FLAGS_2));
+            b.setMetadata(m2);
+            b.setProperties(packet.getProperties());
+            b.setTick(packet.getTick());
 
-        SetEntityDataPacket b = new SetEntityDataPacket();
-        b.setRuntimeEntityId(packet.getRuntimeEntityId());
-        b.setMetadata(onlyFlags2(meta));
-        b.setProperties(packet.getProperties());
-        b.setTick(packet.getTick());
+            rewriteId(a.getRuntimeEntityId(), a::setRuntimeEntityId);
+            dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT(SPLIT-A)", a, log);
+            this.player.sendPacket(a);
 
-        // Rewrite IDs again (no-op if unchanged), then forward both in order
-        rewriteId(a.getRuntimeEntityId(), a::setRuntimeEntityId);
-        forwardSetEntityData(a);
-        // dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT(SPLIT-A)", a, this.player.getLogger());
+            rewriteId(b.getRuntimeEntityId(), b::setRuntimeEntityId);
+            dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT(SPLIT-B)", b, log);
+            this.player.sendPacket(b);
 
-        rewriteId(b.getRuntimeEntityId(), b::setRuntimeEntityId);
-        forwardSetEntityData(b);
-        // dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT(SPLIT-B)", b, this.player.getLogger());
-
-        return PacketSignal.HANDLED; // stop default handling; we already forwarded
+            return PacketSignal.HANDLED;
+        }
+        if (hasF)  packet.getMetadata().remove(EntityDataTypes.FLAGS_2);
+        if (hasF2) packet.getMetadata().remove(EntityDataTypes.FLAGS);
     }
 
-    // If only one lane present, ensure the other is not accidentally present
-    if (hasFlags)  meta.remove(EntityDataTypes.FLAGS_2);
-    if (hasFlags2) meta.remove(EntityDataTypes.FLAGS);
-
-    // Rewrite metadata fields that are entity IDs (OWNER_EID etc.)
-    PacketSignal metaSig = this.rewriteMetadata(meta);
-
-    // dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT", packet, this.player.getLogger());
+    PacketSignal metaSig = this.rewriteMetadata(packet.getMetadata());
+    dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT", packet, log);
     return mergeSignals(idSig, metaSig);
 }
 

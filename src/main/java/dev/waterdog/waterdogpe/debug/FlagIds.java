@@ -18,7 +18,6 @@ public final class FlagIds {
             f.setAccessible(true);
             MAP = (TypeMap<EntityFlag>) f.get(null);
 
-            // TypeMap has no size(); count mapped entries instead
             int mapped = 0;
             for (EntityFlag flag : EntityFlag.values()) {
                 int id = MAP.getId(flag);
