@@ -21,6 +21,8 @@ import org.cloudburstmc.protocol.bedrock.data.entity.EntityDataType;
 import org.cloudburstmc.protocol.bedrock.data.entity.EntityDataTypes;
 import org.cloudburstmc.protocol.bedrock.data.entity.EntityLinkData;
 import org.cloudburstmc.protocol.bedrock.packet.*;
+
+import dev.waterdog.waterdogpe.logger.MainLogger;
 import dev.waterdog.waterdogpe.network.protocol.rewrite.types.RewriteData;
 import dev.waterdog.waterdogpe.network.protocol.user.PlayerRewriteUtils;
 import dev.waterdog.waterdogpe.player.ProxiedPlayer;
@@ -105,12 +107,24 @@ public class EntityMap implements BedrockPacketHandler {
         return rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
     }
 
-    @Override
-    public PacketSignal handle(SetEntityDataPacket packet) {
-        PacketSignal signal = rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
-        PacketSignal metaSignal = this.rewriteMetadata(packet.getMetadata());
-        return mergeSignals(signal, metaSignal);
-    }
+    //@Override
+    //public PacketSignal handle(SetEntityDataPacket packet) {
+    //    PacketSignal signal = rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
+    //    PacketSignal metaSignal = this.rewriteMetadata(packet.getMetadata());
+    //    return mergeSignals(signal, metaSignal);
+    //}
+@Override
+public PacketSignal handle(SetEntityDataPacket packet) {
+    MainLogger log = this.player.getLogger();
+    dev.waterdog.waterdogpe.debug.EDataProbe.dump("IN", packet, log);
+
+    PacketSignal signal = rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
+    PacketSignal metaSignal = this.rewriteMetadata(packet.getMetadata());
+
+    dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT", packet, log);
+    return mergeSignals(signal, metaSignal);
+}
+
 
     @Override
     public PacketSignal handle(SetEntityMotionPacket packet) {

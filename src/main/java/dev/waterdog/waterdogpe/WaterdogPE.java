@@ -78,6 +78,7 @@ public class WaterdogPE {
             logger.warning("§eUsing higher memory leak detection levels in production environment can affect application stability and performance!");
         }
 
+        //dev.waterdog.waterdogpe.debug.FlagDump.dumpAll(logger);
         dev.waterdog.waterdogpe.debug.FlagDump.dumpAll(logger);
         try {
             new ProxyServer(logger, DATA_PATH, PLUGIN_PATH);
