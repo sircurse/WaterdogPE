@@ -115,15 +115,97 @@ public class EntityMap implements BedrockPacketHandler {
     //}
 @Override
 public PacketSignal handle(SetEntityDataPacket packet) {
-    MainLogger log = this.player.getLogger();
-    dev.waterdog.waterdogpe.debug.EDataProbe.dump("IN", packet, log);
+    // --- probe (keep if useful) ---
+    // dev.waterdog.waterdogpe.debug.EDataProbe.dump("IN", packet, this.player.getLogger());
 
-    PacketSignal signal = rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
-    PacketSignal metaSignal = this.rewriteMetadata(packet.getMetadata());
+    // Always rewrite the eid first
+    PacketSignal idSig = rewriteId(packet.getRuntimeEntityId(), packet::setRuntimeEntityId);
 
-    dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT", packet, log);
-    return mergeSignals(signal, metaSignal);
+    EntityDataMap meta = packet.getMetadata();
+    boolean hasFlags  = meta.containsKey(EntityDataTypes.FLAGS);
+    boolean hasFlags2 = meta.containsKey(EntityDataTypes.FLAGS_2);
+
+    if (hasFlags && hasFlags2) {
+        // Split into TWO packets to mimic BDS exactly: (FLAGS [+ HEIGHT]) then (FLAGS_2)
+        SetEntityDataPacket a = new SetEntityDataPacket();
+        a.setRuntimeEntityId(packet.getRuntimeEntityId());
+        a.setMetadata(onlyFlags(meta));
+        a.setProperties(packet.getProperties());
+        a.setTick(packet.getTick());
+
+        SetEntityDataPacket b = new SetEntityDataPacket();
+        b.setRuntimeEntityId(packet.getRuntimeEntityId());
+        b.setMetadata(onlyFlags2(meta));
+        b.setProperties(packet.getProperties());
+        b.setTick(packet.getTick());
+
+        // Rewrite IDs again (no-op if unchanged), then forward both in order
+        rewriteId(a.getRuntimeEntityId(), a::setRuntimeEntityId);
+        forwardSetEntityData(a);
+        // dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT(SPLIT-A)", a, this.player.getLogger());
+
+        rewriteId(b.getRuntimeEntityId(), b::setRuntimeEntityId);
+        forwardSetEntityData(b);
+        // dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT(SPLIT-B)", b, this.player.getLogger());
+
+        return PacketSignal.HANDLED; // stop default handling; we already forwarded
+    }
+
+    // If only one lane present, ensure the other is not accidentally present
+    if (hasFlags)  meta.remove(EntityDataTypes.FLAGS_2);
+    if (hasFlags2) meta.remove(EntityDataTypes.FLAGS);
+
+    // Rewrite metadata fields that are entity IDs (OWNER_EID etc.)
+    PacketSignal metaSig = this.rewriteMetadata(meta);
+
+    // dev.waterdog.waterdogpe.debug.EDataProbe.dump("OUT", packet, this.player.getLogger());
+    return mergeSignals(idSig, metaSig);
 }
+
+
+
+
+
+
+
+// add this helper inside EntityMap:
+private void forwardSetEntityData(SetEntityDataPacket pkt) {
+    // reuse WDPE's standard outgoing path to the client
+    this.player.sendPacket(pkt);
+}
+
+// optional: keep HEIGHT with FLAGS lane (matches BDS behavior)
+private static EntityDataMap onlyFlags(EntityDataMap src) {
+    EntityDataMap m = new EntityDataMap();
+    if (src.containsKey(EntityDataTypes.FLAGS)) {
+        m.put(EntityDataTypes.FLAGS, src.get(EntityDataTypes.FLAGS));
+    }
+    if (src.containsKey(EntityDataTypes.HEIGHT)) {
+        m.put(EntityDataTypes.HEIGHT, src.get(EntityDataTypes.HEIGHT));
+    }
+    return m;
+}
+
+private static EntityDataMap onlyFlags2(EntityDataMap src) {
+    EntityDataMap m = new EntityDataMap();
+    if (src.containsKey(EntityDataTypes.FLAGS_2)) {
+        m.put(EntityDataTypes.FLAGS_2, src.get(EntityDataTypes.FLAGS_2));
+    }
+    return m;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     @Override

@@ -79,7 +79,7 @@ public class WaterdogPE {
         }
 
         //dev.waterdog.waterdogpe.debug.FlagDump.dumpAll(logger);
-        dev.waterdog.waterdogpe.debug.FlagDump.dumpAll(logger);
+        //dev.waterdog.waterdogpe.debug.FlagDump.dumpAll(logger);
         try {
             new ProxyServer(logger, DATA_PATH, PLUGIN_PATH);
         } catch (Exception e) {
